@@ -1,0 +1,27 @@
+---
+# --- Cluster auth ---
+# Leave these unset to use the current `oc login` session / default kubeconfig.
+# Set them (e.g. via --extra-vars, env, or an Ansible Vault file) to connect
+# explicitly instead, such as from AAP/AWX or CI.
+k8s_host: "{{ lookup('env', 'K8S_AUTH_HOST') | default(omit) }}"
+k8s_api_key: "{{ lookup('env', 'K8S_AUTH_API_KEY') | default(omit) }}"
+k8s_validate_certs: "{{ lookup('env', 'K8S_AUTH_VERIFY_SSL') | default(true) }}"
+
+# --- VM identity ---
+vm_name: demo-vm-01
+vm_namespace: default
+create_namespace: true
+vm_running: true
+
+# --- Sizing (instance type + preference, the OCP Virt 4.1x+ recommended way) ---
+vm_instancetype: u1.medium          # see: oc get virtualmachineclusterinstancetypes
+vm_preference: centos.stream9       # see: oc get virtualmachineclusterpreferences
+
+# --- Boot source (golden image shipped with OpenShift Virtualization) ---
+vm_datasource: centos-stream9
+vm_datasource_namespace: openshift-virtualization-os-images
+vm_disk_size: 30Gi
+
+# --- cloud-init access ---
+cloud_user: cloud-user
+ssh_authorized_key: "ssh-ed25519 AAAA...replace-with-your-public-key... user@host"
