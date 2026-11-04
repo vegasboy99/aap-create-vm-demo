@@ -1,0 +1,112 @@
+---
+# create_container.yml — launch a container workload on OpenShift
+#
+# Deployment + Service + Route from one playbook. The image is a Red Hat UBI
+# Apache server pulled from the public registry, so no pull secret is needed.
+- name: Launch a container from an Ansible project
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    demo_namespace: ansible-demo
+    app_name: demo-web
+    app_image: registry.access.redhat.com/ubi9/httpd-24:latest
+    app_replicas: 2
+    demo_label: ansible-virt-demo
+
+  tasks:
+    - name: Make sure the demo namespace exists
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ demo_namespace }}"
+            labels:
+              app.kubernetes.io/managed-by: "{{ demo_label }}"
+
+    - name: Deployment and Service
+      kubernetes.core.k8s:
+        state: present
+        namespace: "{{ demo_namespace }}"
+        definition:
+          - apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: "{{ app_name }}"
+              labels:
+                app: "{{ app_name }}"
+                app.kubernetes.io/managed-by: "{{ demo_label }}"
+            spec:
+              replicas: "{{ app_replicas | int }}"
+              selector:
+                matchLabels:
+                  app: "{{ app_name }}"
+              template:
+                metadata:
+                  labels:
+                    app: "{{ app_name }}"
+                spec:
+                  containers:
+                    - name: web
+                      image: "{{ app_image }}"
+                      ports:
+                        - containerPort: 8080
+                      readinessProbe:
+                        httpGet:
+                          path: /
+                          port: 8080
+          - apiVersion: v1
+            kind: Service
+            metadata:
+              name: "{{ app_name }}"
+              labels:
+                app: "{{ app_name }}"
+                app.kubernetes.io/managed-by: "{{ demo_label }}"
+            spec:
+              selector:
+                app: "{{ app_name }}"
+              ports:
+                - port: 8080
+                  targetPort: 8080
+
+    - name: Expose it with a Route
+      kubernetes.core.k8s:
+        state: present
+        namespace: "{{ demo_namespace }}"
+        definition:
+          apiVersion: route.openshift.io/v1
+          kind: Route
+          metadata:
+            name: "{{ app_name }}"
+            labels:
+              app.kubernetes.io/managed-by: "{{ demo_label }}"
+          spec:
+            to:
+              kind: Service
+              name: "{{ app_name }}"
+            port:
+              targetPort: 8080
+            tls:
+              termination: edge
+      register: route
+
+    - name: Wait for the rollout
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: Deployment
+        name: "{{ app_name }}"
+        namespace: "{{ demo_namespace }}"
+        wait: true
+        wait_condition:
+          type: Available
+          status: "True"
+        wait_timeout: 180
+
+    - name: Show what was launched
+      ansible.builtin.debug:
+        msg:
+          - "{{ app_replicas }} replicas of {{ app_image }} running in {{ demo_namespace }}"
+          - "Open https://{{ route.result.spec.host }} in a browser"
+

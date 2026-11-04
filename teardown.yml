@@ -1,0 +1,38 @@
+---
+# teardown.yml — remove everything the demo created, by label
+- name: Remove the demo workloads
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    demo_namespace: ansible-demo
+    demo_label: ansible-virt-demo
+    delete_namespace: false          # survey: set true to remove the namespace too
+
+  tasks:
+    - name: Delete the labelled VM, Deployment, Service and Route
+      kubernetes.core.k8s:
+        state: absent
+        namespace: "{{ demo_namespace }}"
+        api_version: "{{ item.api }}"
+        kind: "{{ item.kind }}"
+        label_selectors:
+          - "app.kubernetes.io/managed-by={{ demo_label }}"
+        wait: true
+      loop:
+        - { api: kubevirt.io/v1, kind: VirtualMachine }
+        - { api: route.openshift.io/v1, kind: Route }
+        - { api: v1, kind: Service }
+        - { api: apps/v1, kind: Deployment }
+      loop_control:
+        label: "{{ item.kind }}"
+
+    - name: Delete the namespace when asked
+      kubernetes.core.k8s:
+        state: absent
+        api_version: v1
+        kind: Namespace
+        name: "{{ demo_namespace }}"
+        wait: true
+      when: delete_namespace | bool
+
