@@ -1,0 +1,121 @@
+---
+# create_vm.yml — launch a RHEL 9 virtual machine on OpenShift Virtualization
+#
+# Runs on localhost against the cluster API. The "OpenShift or Kubernetes API
+# Bearer Token" credential on the job template supplies K8S_AUTH_HOST,
+# K8S_AUTH_API_KEY and the CA, so no connection details live in the playbook.
+#
+# Idempotent: running it twice reports "ok", not "changed". That is the first
+# thing worth showing the audience.
+- name: Launch a virtual machine from an Ansible project
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    demo_namespace: ansible-demo
+    vm_name: demo-rhel9
+    vm_instancetype: u1.small        # 1 vCPU / 2 GiB; u1.medium = 1/4, u1.large = 2/8
+    vm_preference: rhel.9
+    vm_boot_source: rhel9            # DataSource in openshift-virtualization-os-images
+    vm_disk_size: 30Gi
+    vm_user: cloud-user
+    vm_password: "{{ lookup('ansible.builtin.password', '/dev/null', length=14) }}"
+    vm_ssh_public_key: ""            # optional: paste a public key via the survey
+    demo_label: ansible-virt-demo
+
+  tasks:
+    - name: Make sure the demo namespace exists
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ demo_namespace }}"
+            labels:
+              app.kubernetes.io/managed-by: "{{ demo_label }}"
+
+    - name: Create the virtual machine (instance type + boot source + cloud-init)
+      kubernetes.core.k8s:
+        state: present
+        wait: true
+        wait_timeout: 120
+        definition:
+          apiVersion: kubevirt.io/v1
+          kind: VirtualMachine
+          metadata:
+            name: "{{ vm_name }}"
+            namespace: "{{ demo_namespace }}"
+            labels:
+              app.kubernetes.io/managed-by: "{{ demo_label }}"
+          spec:
+            runStrategy: Always
+            instancetype:
+              name: "{{ vm_instancetype }}"
+            preference:
+              name: "{{ vm_preference }}"
+            dataVolumeTemplates:
+              - metadata:
+                  name: "{{ vm_name }}-rootdisk"
+                spec:
+                  sourceRef:
+                    kind: DataSource
+                    name: "{{ vm_boot_source }}"
+                    namespace: openshift-virtualization-os-images
+                  storage:
+                    resources:
+                      requests:
+                        storage: "{{ vm_disk_size }}"
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/managed-by: "{{ demo_label }}"
+                  kubevirt.io/domain: "{{ vm_name }}"
+              spec:
+                domain:
+                  devices: {}
+                volumes:
+                  - name: rootdisk
+                    dataVolume:
+                      name: "{{ vm_name }}-rootdisk"
+                  - name: cloudinitdisk
+                    cloudInitNoCloud:
+                      userData: |
+                        #cloud-config
+                        user: {{ vm_user }}
+                        password: {{ vm_password }}
+                        chpasswd: { expire: False }
+                        {% if vm_ssh_public_key | length > 0 %}
+                        ssh_authorized_keys:
+                          - {{ vm_ssh_public_key }}
+                        {% endif %}
+      register: vm_result
+
+    - name: Wait for the VM to report Ready (disk clone + first boot)
+      kubernetes.core.k8s_info:
+        api_version: kubevirt.io/v1
+        kind: VirtualMachine
+        name: "{{ vm_name }}"
+        namespace: "{{ demo_namespace }}"
+        wait: true
+        wait_condition:
+          type: Ready
+          status: "True"
+        wait_timeout: 600
+
+    - name: Read the running instance for its address
+      kubernetes.core.k8s_info:
+        api_version: kubevirt.io/v1
+        kind: VirtualMachineInstance
+        name: "{{ vm_name }}"
+        namespace: "{{ demo_namespace }}"
+      register: vmi
+
+    - name: Show what was launched
+      ansible.builtin.debug:
+        msg:
+          - "VM {{ vm_name }} in namespace {{ demo_namespace }} is {{ vmi.resources[0].status.phase }}"
+          - "Pod network address: {{ (vmi.resources[0].status.interfaces | default([{}]))[0].ipAddress | default('pending') }}"
+          - "Console: OpenShift web console → Virtualization → VirtualMachines → {{ vm_name }}"
+          - "Login: {{ vm_user }} / the password from the survey (or SSH key if one was given)"
+
