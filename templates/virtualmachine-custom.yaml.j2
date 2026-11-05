@@ -32,7 +32,12 @@ spec:
     spec:
       domain:
         cpu:
-          cores: {{ vm_cpu_cores }}
+          # centos.stream9's VirtualMachineClusterPreference declares
+          # preferredCpuTopology: sockets, so the admission webhook counts
+          # vCPUs from `sockets`, not `cores`.
+          sockets: {{ vm_cpu_cores }}
+          cores: 1
+          threads: 1
         resources:
           requests:
             memory: {{ vm_memory }}
