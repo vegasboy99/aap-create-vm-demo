@@ -3,15 +3,23 @@
 # Leave these unset to use the current `oc login` session / default kubeconfig.
 # Set them (e.g. via --extra-vars, env, or an Ansible Vault file) to connect
 # explicitly instead, such as from AAP/AWX or CI.
-k8s_host: "{{ lookup('env', 'K8S_AUTH_HOST') | default(omit) }}"
-k8s_api_key: "{{ lookup('env', 'K8S_AUTH_API_KEY') | default(omit) }}"
-k8s_validate_certs: "{{ lookup('env', 'K8S_AUTH_VERIFY_SSL') | default(true) }}"
+# The `true` 2nd arg to default() also substitutes on empty string, not just
+# "undefined" — the env lookup returns '' (not undefined) when a var isn't
+# set, which default() alone doesn't catch.
+k8s_host: "{{ lookup('env', 'K8S_AUTH_HOST') | default(omit, true) }}"
+k8s_api_key: "{{ lookup('env', 'K8S_AUTH_API_KEY') | default(omit, true) }}"
+k8s_validate_certs: "{{ lookup('env', 'K8S_AUTH_VERIFY_SSL') | default(true, true) }}"
 
 # --- VM identity ---
 vm_name: demo-vm-01
-vm_namespace: default
+vm_namespace: ansible-demo           # shared with create_container.yml / teardown.yml
 create_namespace: true
 vm_running: true
+
+# --- Teardown bookkeeping ---
+# Everything this playbook creates is labeled app.kubernetes.io/managed-by=<demo_label>
+# so teardown.yml can find and remove it by label.
+demo_label: ansible-virt-demo
 
 # --- Sizing (instance type + preference, the OCP Virt 4.1x+ recommended way) ---
 vm_instancetype: u1.medium          # see: oc get virtualmachineclusterinstancetypes

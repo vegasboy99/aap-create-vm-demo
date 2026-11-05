@@ -6,6 +6,7 @@ metadata:
   labels:
     app: {{ vm_name }}
     vm.kubevirt.io/template: {{ vm_preference }}
+    app.kubernetes.io/managed-by: {{ demo_label }}
 spec:
   running: {{ vm_running | lower }}
   instancetype:
