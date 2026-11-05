@@ -21,9 +21,13 @@ vm_running: true
 # so teardown.yml can find and remove it by label.
 demo_label: ansible-virt-demo
 
-# --- Sizing (instance type + preference, the OCP Virt 4.1x+ recommended way) ---
+# --- Sizing: instance type + preference, used by create_vm.yml ---
 vm_instancetype: u1.medium          # see: oc get virtualmachineclusterinstancetypes
 vm_preference: centos.stream9       # see: oc get virtualmachineclusterpreferences
+
+# --- Sizing: explicit CPU/memory, used by create_vm_custom.yml ---
+vm_cpu_cores: 1
+vm_memory: 2Gi
 
 # --- Boot source (golden image shipped with OpenShift Virtualization) ---
 vm_datasource: centos-stream9

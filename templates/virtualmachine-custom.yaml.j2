@@ -1,0 +1,65 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: {{ vm_name }}
+  namespace: {{ vm_namespace }}
+  labels:
+    app: {{ vm_name }}
+    vm.kubevirt.io/template: {{ vm_preference }}
+    app.kubernetes.io/managed-by: {{ demo_label }}
+spec:
+  running: {{ vm_running | lower }}
+  preference:
+    kind: VirtualMachineClusterPreference
+    name: {{ vm_preference }}
+  dataVolumeTemplates:
+    - metadata:
+        name: {{ vm_name }}-rootdisk
+      spec:
+        sourceRef:
+          kind: DataSource
+          name: {{ vm_datasource }}
+          namespace: {{ vm_datasource_namespace }}
+        storage:
+          resources:
+            requests:
+              storage: {{ vm_disk_size }}
+  template:
+    metadata:
+      labels:
+        kubevirt.io/domain: {{ vm_name }}
+        app.kubernetes.io/managed-by: {{ demo_label }}
+    spec:
+      domain:
+        cpu:
+          cores: {{ vm_cpu_cores }}
+        resources:
+          requests:
+            memory: {{ vm_memory }}
+        devices:
+          disks:
+            - name: rootdisk
+              disk:
+                bus: virtio
+            - name: cloudinitdisk
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: rootdisk
+          dataVolume:
+            name: {{ vm_name }}-rootdisk
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              user: {{ cloud_user }}
+              ssh_authorized_keys:
+                - {{ ssh_authorized_key }}
+              chpasswd:
+                expire: false

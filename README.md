@@ -7,10 +7,12 @@ Platform (AAP) via the `kubernetes.core` collection.
 | File | Purpose |
 |---|---|
 | `create_vm.yml` | Creates a `VirtualMachine` (instance type + preference + cloned golden image) and waits for it to boot |
+| `create_vm_custom.yml` | Same, but lets you set CPU cores and memory explicitly instead of picking an instance type |
 | `create_container.yml` | Creates a Deployment/Service/Route — a quick non-VM comparison demo |
 | `teardown.yml` | Deletes the demo workloads by label, optionally the namespace too |
-| `group_vars/all.yml` | Default vars for `create_vm.yml` (VM name, size, image, SSH key, auth) |
+| `group_vars/all.yml` | Default vars shared by both VM playbooks (VM name, size, image, SSH key, auth) |
 | `templates/virtualmachine.yaml.j2` | The `VirtualMachine` manifest template rendered by `create_vm.yml` |
+| `templates/virtualmachine-custom.yaml.j2` | The `VirtualMachine` manifest template rendered by `create_vm_custom.yml` |
 | `inventory/hosts.yml` | Single `localhost` host — everything runs against the Kubernetes API, not over SSH |
 
 This README covers what you need to set up in AAP (you already have AAP and
@@ -139,6 +141,22 @@ Credential from above.
 | `ssh_authorized_key` | Text | *(your public key)* |
 | `vm_instancetype` | Text | `u1.medium` |
 | `vm_preference` | Text | `centos.stream9` |
+
+### Create VM (custom CPU/memory)
+
+- **Playbook:** `create_vm_custom.yml`
+- **Credentials:** the OpenShift/Kubernetes credential from step 2
+- **Survey:**
+
+| Variable | Type | Default |
+|---|---|---|
+| `vm_name` | Text | `demo-vm-01` |
+| `vm_cpu_cores` | Integer | `1` |
+| `vm_memory` | Text | `2Gi` |
+
+These three are all the survey needs to expose — `vm_namespace`, the boot
+image, and the SSH key fall back to the same defaults as **Create VM** via
+`group_vars/all.yml`, and can still be overridden with extra vars if needed.
 
 ### Create Container Demo (optional comparison)
 

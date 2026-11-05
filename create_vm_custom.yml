@@ -1,0 +1,57 @@
+---
+# create_vm_custom.yml — create a VM with explicit CPU/memory, instead of an
+# instance type (see create_vm.yml for the instance-type based version).
+- name: Create a new VM with custom CPU and memory
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Ensure target namespace exists
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ vm_namespace }}"
+            labels:
+              app.kubernetes.io/managed-by: "{{ demo_label }}"
+        host: "{{ k8s_host | default(omit) }}"
+        api_key: "{{ k8s_api_key | default(omit) }}"
+        validate_certs: "{{ k8s_validate_certs }}"
+      when: create_namespace | bool
+
+    - name: Create the VirtualMachine
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('template', 'templates/virtualmachine-custom.yaml.j2') }}"
+        host: "{{ k8s_host | default(omit) }}"
+        api_key: "{{ k8s_api_key | default(omit) }}"
+        validate_certs: "{{ k8s_validate_certs }}"
+      register: vm_result
+
+    - name: Wait for the VirtualMachineInstance to start running
+      kubernetes.core.k8s_info:
+        api_version: kubevirt.io/v1
+        kind: VirtualMachineInstance
+        name: "{{ vm_name }}"
+        namespace: "{{ vm_namespace }}"
+        host: "{{ k8s_host | default(omit) }}"
+        api_key: "{{ k8s_api_key | default(omit) }}"
+        validate_certs: "{{ k8s_validate_certs }}"
+      register: vmi_info
+      until: >
+        vmi_info.resources | length > 0 and
+        vmi_info.resources[0].status.phase | default('') == 'Running'
+      retries: 30
+      delay: 10
+      when: vm_running | bool
+
+    - name: Show VM status
+      ansible.builtin.debug:
+        msg: >-
+          VM '{{ vm_name }}' ({{ vm_cpu_cores }} vCPU, {{ vm_memory }} RAM)
+          in namespace '{{ vm_namespace }}' is
+          {{ vmi_info.resources[0].status.phase | default('Stopped') }}.
+          {{ 'IP: ' + (vmi_info.resources[0].status.interfaces[0].ipAddress | default('pending'))
+             if vm_running | bool else '' }}
